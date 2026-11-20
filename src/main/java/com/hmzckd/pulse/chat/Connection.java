@@ -1,10 +1,13 @@
 package com.hmzckd.pulse.chat;
 
 import java.io.IOException;
+import java.util.ArrayList;
+import java.util.List;
 import java.util.Map;
 import java.util.Set;
 import java.util.UUID;
 import java.util.concurrent.ConcurrentHashMap;
+import java.util.concurrent.locks.ReentrantLock;
 
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -21,6 +24,8 @@ public final class Connection {
 	private final CurrentUser user;
 	private final Set<UUID> rooms = ConcurrentHashMap.newKeySet();
 	private final Map<UUID, Long> lastTypingAt = new ConcurrentHashMap<>();
+	private final ReentrantLock gate = new ReentrantLock();
+	private List<String> beforeReady = new ArrayList<>();
 
 	Connection(WebSocketSession session, CurrentUser user) {
 		this.session = session;
@@ -56,6 +61,32 @@ public final class Connection {
 	}
 
 	void send(String json) {
+		gate.lock();
+		try {
+			if (beforeReady != null) {
+				beforeReady.add(json);
+				return;
+			}
+		}
+		finally {
+			gate.unlock();
+		}
+		write(json);
+	}
+
+	void sendReady(String readyFrame) {
+		gate.lock();
+		try {
+			write(readyFrame);
+			beforeReady.forEach(this::write);
+			beforeReady = null;
+		}
+		finally {
+			gate.unlock();
+		}
+	}
+
+	private void write(String json) {
 		try {
 			session.sendMessage(new TextMessage(json));
 		}

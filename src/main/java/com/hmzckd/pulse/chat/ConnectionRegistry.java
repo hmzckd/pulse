@@ -1,11 +1,9 @@
 package com.hmzckd.pulse.chat;
 
 import java.util.Collection;
-import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
-import java.util.TreeSet;
 import java.util.UUID;
 import java.util.concurrent.ConcurrentHashMap;
 
@@ -33,6 +31,9 @@ public class ConnectionRegistry {
 	void subscribe(Connection connection, UUID roomId) {
 		connection.rooms().add(roomId);
 		byRoom.computeIfAbsent(roomId, id -> ConcurrentHashMap.newKeySet()).add(connection);
+		if (!byId.containsKey(connection.id())) {
+			removeFrom(byRoom, roomId, connection);
+		}
 	}
 
 	Removed remove(String connectionId) {
@@ -50,26 +51,6 @@ public class ConnectionRegistry {
 	record Removed(Connection connection, boolean lastForUser) {
 	}
 
-	Collection<Connection> sharingRoomsWith(Connection connection) {
-		Set<Connection> result = new HashSet<>();
-		for (UUID roomId : connection.rooms()) {
-			for (Connection other : inRoom(roomId)) {
-				if (!other.user().id().equals(connection.user().id())) {
-					result.add(other);
-				}
-			}
-		}
-		return result;
-	}
-
-	Set<String> onlineUsernamesSharingRoomsWith(Connection connection) {
-		Set<String> names = new TreeSet<>();
-		for (Connection other : sharingRoomsWith(connection)) {
-			names.add(other.user().username());
-		}
-		return names;
-	}
-
 	Connection get(String connectionId) {
 		return byId.get(connectionId);
 	}
@@ -77,6 +58,10 @@ public class ConnectionRegistry {
 	Collection<Connection> inRoom(UUID roomId) {
 		Set<Connection> connections = byRoom.get(roomId);
 		return connections == null ? List.of() : connections;
+	}
+
+	Set<UUID> userIds() {
+		return byUser.keySet();
 	}
 
 	public int count() {

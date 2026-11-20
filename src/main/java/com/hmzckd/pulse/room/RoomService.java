@@ -75,4 +75,8 @@ public class RoomService {
 	public List<UUID> roomIdsOf(UUID userId) {
 		return rooms.findRoomIdsByMember(userId);
 	}
+
+	public List<Roommate> roommatesOf(UUID userId) {
+		return rooms.findRoommates(userId);
+	}
 }

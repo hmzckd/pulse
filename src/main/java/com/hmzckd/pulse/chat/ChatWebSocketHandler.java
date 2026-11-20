@@ -36,14 +36,16 @@ class ChatWebSocketHandler extends TextWebSocketHandler {
 	static final Duration TYPING_INTERVAL = Duration.ofSeconds(2);
 
 	private final ConnectionRegistry registry;
+	private final Relay relay;
 	private final Presence presence;
 	private final RoomService rooms;
 	private final MessageService messages;
 	private final JsonMapper json;
 
-	ChatWebSocketHandler(ConnectionRegistry registry, Presence presence, RoomService rooms, MessageService messages,
-			JsonMapper json) {
+	ChatWebSocketHandler(ConnectionRegistry registry, Relay relay, Presence presence, RoomService rooms,
+			MessageService messages, JsonMapper json) {
 		this.registry = registry;
+		this.relay = relay;
 		this.presence = presence;
 		this.rooms = rooms;
 		this.messages = messages;
@@ -61,11 +63,12 @@ class ChatWebSocketHandler extends TextWebSocketHandler {
 		for (UUID roomId : roomIds) {
 			registry.subscribe(connection, roomId);
 		}
-		connection.send(json.writeValueAsString(ServerEvents.Ready.of(user.username(), roomIds,
-				registry.onlineUsernamesSharingRoomsWith(connection))));
+		relay.refresh(connection);
 		if (firstForUser) {
-			presence.announce(connection, true);
+			presence.cameOnline(user, roomIds);
 		}
+		connection.sendReady(json.writeValueAsString(ServerEvents.Ready.of(user.username(), roomIds,
+				presence.onlineAmong(rooms.roommatesOf(user.id())))));
 	}
 
 	@Override
@@ -95,8 +98,13 @@ class ChatWebSocketHandler extends TextWebSocketHandler {
 	@Override
 	public void afterConnectionClosed(WebSocketSession session, CloseStatus status) {
 		ConnectionRegistry.Removed removed = registry.remove(session.getId());
-		if (removed != null && removed.lastForUser()) {
-			presence.announce(removed.connection(), false);
+		if (removed == null) {
+			return;
+		}
+		Connection connection = removed.connection();
+		relay.refresh(connection);
+		if (removed.lastForUser()) {
+			presence.wentOffline(connection.user(), connection.rooms());
 		}
 	}
 
@@ -133,10 +141,7 @@ class ChatWebSocketHandler extends TextWebSocketHandler {
 		if (result.duplicate()) {
 			return;
 		}
-		String payload = json.writeValueAsString(ServerEvents.MessageNew.of(result.message()));
-		for (Connection member : registry.inRoom(roomId)) {
-			member.send(payload);
-		}
+		relay.toRoom(roomId, null, json.writeValueAsString(ServerEvents.MessageNew.of(result.message())));
 	}
 
 	private void onTyping(Connection connection, JsonNode node) {
@@ -152,12 +157,8 @@ class ChatWebSocketHandler extends TextWebSocketHandler {
 		if (!connection.mayAnnounceTyping(roomId, System.nanoTime(), TYPING_INTERVAL.toNanos())) {
 			return;
 		}
-		String payload = json.writeValueAsString(ServerEvents.Typing.of(roomId, connection.user().username()));
-		for (Connection member : registry.inRoom(roomId)) {
-			if (!member.user().id().equals(connection.user().id())) {
-				member.send(payload);
-			}
-		}
+		relay.toRoom(roomId, connection.user().id(),
+				json.writeValueAsString(ServerEvents.Typing.of(roomId, connection.user().username())));
 	}
 
 	private void onRead(Connection connection, JsonNode node) {
@@ -172,10 +173,7 @@ class ChatWebSocketHandler extends TextWebSocketHandler {
 			return;
 		}
 		long lastRead = rooms.markRead(roomId, connection.user().id(), seq.asLong());
-		String payload = json.writeValueAsString(ServerEvents.Read.of(roomId, lastRead));
-		for (Connection tab : registry.ofUser(connection.user().id())) {
-			tab.send(payload);
-		}
+		relay.toUser(connection.user().id(), json.writeValueAsString(ServerEvents.Read.of(roomId, lastRead)));
 	}
 
 	private void onSync(Connection connection, JsonNode node) {

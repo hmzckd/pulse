@@ -119,6 +119,19 @@ class RoomRepository {
 				.list();
 	}
 
+	List<Roommate> findRoommates(UUID userId) {
+		return jdbc.sql("""
+				SELECT DISTINCT u.id, u.username
+				FROM room_members me
+				JOIN room_members other ON other.room_id = me.room_id AND other.user_id <> me.user_id
+				JOIN users u ON u.id = other.user_id
+				WHERE me.user_id = :userId
+				""")
+				.param("userId", userId)
+				.query(Roommate.class)
+				.list();
+	}
+
 	private static Instant toInstant(OffsetDateTime value) {
 		return value.toInstant();
 	}

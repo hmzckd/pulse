@@ -1,7 +1,5 @@
 package com.hmzckd.pulse.chat;
 
-import java.util.Collection;
-
 import org.springframework.stereotype.Component;
 import org.springframework.transaction.event.TransactionalEventListener;
 
@@ -10,23 +8,15 @@ import com.hmzckd.pulse.room.MemberJoined;
 @Component
 class MembershipListener {
 
-	private final ConnectionRegistry registry;
-	private final Presence presence;
+	private final Relay relay;
 
-	MembershipListener(ConnectionRegistry registry, Presence presence) {
-		this.registry = registry;
-		this.presence = presence;
+	MembershipListener(Relay relay) {
+		this.relay = relay;
 	}
 
 	@TransactionalEventListener
 	void onMemberJoined(MemberJoined event) {
-		Collection<Connection> connections = registry.ofUser(event.userId());
-		if (connections.isEmpty()) {
-			return;
-		}
-		for (Connection connection : connections) {
-			registry.subscribe(connection, event.roomId());
-		}
-		presence.announceInRoom(connections.iterator().next(), event.roomId());
+		relay.subscribeUser(event.userId(), event.roomId());
+		relay.joined(event.userId(), event.roomId());
 	}
 }
