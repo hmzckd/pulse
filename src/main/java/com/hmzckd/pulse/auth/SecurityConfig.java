@@ -49,6 +49,7 @@ class SecurityConfig {
 				.authorizeHttpRequests(auth -> auth
 						.requestMatchers(HttpMethod.POST, "/api/sessions").permitAll()
 						.requestMatchers("/actuator/health", "/error").permitAll()
+						.requestMatchers("/ws").permitAll()
 						.anyRequest().authenticated())
 				.oauth2ResourceServer(oauth -> oauth
 						.jwt(Customizer.withDefaults())

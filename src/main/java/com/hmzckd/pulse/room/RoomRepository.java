@@ -85,6 +85,13 @@ class RoomRepository {
 				.list();
 	}
 
+	List<UUID> findRoomIdsByMember(UUID userId) {
+		return jdbc.sql("SELECT room_id FROM room_members WHERE user_id = :userId")
+				.param("userId", userId)
+				.query(UUID.class)
+				.list();
+	}
+
 	private static Instant toInstant(OffsetDateTime value) {
 		return value.toInstant();
 	}

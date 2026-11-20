@@ -3,6 +3,7 @@ package com.hmzckd.pulse.room;
 import java.util.List;
 import java.util.UUID;
 
+import org.springframework.context.ApplicationEventPublisher;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -15,9 +16,11 @@ public class RoomService {
 	static final int LIST_LIMIT = 100;
 
 	private final RoomRepository rooms;
+	private final ApplicationEventPublisher events;
 
-	RoomService(RoomRepository rooms) {
+	RoomService(RoomRepository rooms, ApplicationEventPublisher events) {
 		this.rooms = rooms;
+		this.events = events;
 	}
 
 	@Transactional
@@ -29,6 +32,7 @@ public class RoomService {
 		UUID id = UUID.randomUUID();
 		rooms.insert(id, name, creatorId);
 		rooms.addMember(id, creatorId);
+		events.publishEvent(new MemberJoined(id, creatorId));
 		return get(id);
 	}
 
@@ -46,9 +50,14 @@ public class RoomService {
 			throw new NotFoundException("room " + roomId + " not found");
 		}
 		rooms.addMember(roomId, userId);
+		events.publishEvent(new MemberJoined(roomId, userId));
 	}
 
 	public List<MyRoomResponse> roomsOf(UUID userId) {
 		return rooms.findByMember(userId);
+	}
+
+	public List<UUID> roomIdsOf(UUID userId) {
+		return rooms.findRoomIdsByMember(userId);
 	}
 }
