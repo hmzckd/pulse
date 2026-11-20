@@ -1,5 +1,6 @@
 package com.hmzckd.pulse.chat;
 
+import java.time.Duration;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
@@ -32,13 +33,18 @@ class ChatWebSocketHandler extends TextWebSocketHandler {
 	private static final int SEND_TIME_LIMIT_MS = 5_000;
 	private static final int BUFFER_SIZE_LIMIT_BYTES = 512 * 1024;
 
+	static final Duration TYPING_INTERVAL = Duration.ofSeconds(2);
+
 	private final ConnectionRegistry registry;
+	private final Presence presence;
 	private final RoomService rooms;
 	private final MessageService messages;
 	private final JsonMapper json;
 
-	ChatWebSocketHandler(ConnectionRegistry registry, RoomService rooms, MessageService messages, JsonMapper json) {
+	ChatWebSocketHandler(ConnectionRegistry registry, Presence presence, RoomService rooms, MessageService messages,
+			JsonMapper json) {
 		this.registry = registry;
+		this.presence = presence;
 		this.rooms = rooms;
 		this.messages = messages;
 		this.json = json;
@@ -50,12 +56,16 @@ class ChatWebSocketHandler extends TextWebSocketHandler {
 		WebSocketSession safe = new ConcurrentWebSocketSessionDecorator(session, SEND_TIME_LIMIT_MS,
 				BUFFER_SIZE_LIMIT_BYTES);
 		Connection connection = new Connection(safe, user);
-		registry.add(connection);
+		boolean firstForUser = registry.add(connection);
 		List<UUID> roomIds = rooms.roomIdsOf(user.id());
 		for (UUID roomId : roomIds) {
 			registry.subscribe(connection, roomId);
 		}
-		connection.send(json.writeValueAsString(ServerEvents.Ready.of(user.username(), roomIds)));
+		connection.send(json.writeValueAsString(ServerEvents.Ready.of(user.username(), roomIds,
+				registry.onlineUsernamesSharingRoomsWith(connection))));
+		if (firstForUser) {
+			presence.announce(connection, true);
+		}
 	}
 
 	@Override
@@ -76,13 +86,17 @@ class ChatWebSocketHandler extends TextWebSocketHandler {
 		switch (type) {
 			case "message.send" -> onMessageSend(connection, node);
 			case "sync" -> onSync(connection, node);
+			case "typing" -> onTyping(connection, node);
 			default -> sendError(connection, "unknown_type", "unknown message type: " + type);
 		}
 	}
 
 	@Override
 	public void afterConnectionClosed(WebSocketSession session, CloseStatus status) {
-		registry.remove(session.getId());
+		ConnectionRegistry.Removed removed = registry.remove(session.getId());
+		if (removed != null && removed.lastForUser()) {
+			presence.announce(removed.connection(), false);
+		}
 	}
 
 	private void onMessageSend(Connection connection, JsonNode node) {
@@ -121,6 +135,27 @@ class ChatWebSocketHandler extends TextWebSocketHandler {
 		String payload = json.writeValueAsString(ServerEvents.MessageNew.of(result.message()));
 		for (Connection member : registry.inRoom(roomId)) {
 			member.send(payload);
+		}
+	}
+
+	private void onTyping(Connection connection, JsonNode node) {
+		UUID roomId = parseUuid(node.path("roomId").asString(""));
+		if (roomId == null) {
+			sendError(connection, "invalid_message", "roomId must be a UUID");
+			return;
+		}
+		if (!connection.isIn(roomId)) {
+			sendError(connection, "not_a_member", "not a member of room " + roomId);
+			return;
+		}
+		if (!connection.mayAnnounceTyping(roomId, System.nanoTime(), TYPING_INTERVAL.toNanos())) {
+			return;
+		}
+		String payload = json.writeValueAsString(ServerEvents.Typing.of(roomId, connection.user().username()));
+		for (Connection member : registry.inRoom(roomId)) {
+			if (!member.user().id().equals(connection.user().id())) {
+				member.send(payload);
+			}
 		}
 	}
 

@@ -2,6 +2,7 @@ package com.hmzckd.pulse.chat;
 
 import java.time.Instant;
 import java.util.List;
+import java.util.Set;
 import java.util.UUID;
 
 import com.hmzckd.pulse.message.StoredMessage;
@@ -11,10 +12,24 @@ final class ServerEvents {
 	private ServerEvents() {
 	}
 
-	record Ready(String type, String username, List<UUID> rooms) {
+	record Ready(String type, String username, List<UUID> rooms, Set<String> online) {
 
-		static Ready of(String username, List<UUID> rooms) {
-			return new Ready("ready", username, rooms);
+		static Ready of(String username, List<UUID> rooms, Set<String> online) {
+			return new Ready("ready", username, rooms, online);
+		}
+	}
+
+	record Typing(String type, UUID roomId, String username) {
+
+		static Typing of(UUID roomId, String username) {
+			return new Typing("typing", roomId, username);
+		}
+	}
+
+	record PresenceChanged(String type, String username, boolean online) {
+
+		static PresenceChanged of(String username, boolean online) {
+			return new PresenceChanged("presence", username, online);
 		}
 	}
 

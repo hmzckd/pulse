@@ -3,9 +3,7 @@ package com.hmzckd.pulse;
 import static org.assertj.core.api.Assertions.assertThat;
 
 import java.net.URI;
-
-import jakarta.websocket.ContainerProvider;
-import jakarta.websocket.WebSocketContainer;
+import java.util.Set;
 import java.util.UUID;
 import java.util.concurrent.BlockingQueue;
 import java.util.concurrent.LinkedBlockingQueue;
@@ -18,50 +16,61 @@ import org.springframework.web.socket.WebSocketSession;
 import org.springframework.web.socket.client.standard.StandardWebSocketClient;
 import org.springframework.web.socket.handler.TextWebSocketHandler;
 
+import jakarta.websocket.ContainerProvider;
+import jakarta.websocket.WebSocketContainer;
 import tools.jackson.databind.JsonNode;
 import tools.jackson.databind.json.JsonMapper;
 
 public final class TestSocket implements AutoCloseable {
 
 	private static final JsonMapper JSON = JsonMapper.builder().build();
+	private static final Set<String> IGNORED_BY_DEFAULT = Set.of("presence");
 
 	private final BlockingQueue<JsonNode> received = new LinkedBlockingQueue<>();
 	private final WebSocketSession session;
 
-	private TestSocket(int port, String token) throws Exception {
-		this(port, token, new WebSocketHttpHeaders());
-	}
-
-	private TestSocket(int port, String token, WebSocketHttpHeaders headers) throws Exception {
-		URI uri = URI.create("ws://localhost:" + port + "/ws" + (token == null ? "" : "?token=" + token));
+	private TestSocket(String url, WebSocketHttpHeaders headers, Set<String> ignoredTypes) throws Exception {
 		TextWebSocketHandler handler = new TextWebSocketHandler() {
 			@Override
 			protected void handleTextMessage(WebSocketSession session, TextMessage message) {
-				received.add(JSON.readTree(message.getPayload()));
+				JsonNode node = JSON.readTree(message.getPayload());
+				if (!ignoredTypes.contains(node.path("type").asString())) {
+					received.add(node);
+				}
 			}
 		};
 		WebSocketContainer container = ContainerProvider.getWebSocketContainer();
 		container.setDefaultMaxTextMessageBufferSize(1024 * 1024);
 		this.session = new StandardWebSocketClient(container)
-				.execute(handler, headers, uri)
+				.execute(handler, headers, URI.create(url))
 				.get(5, TimeUnit.SECONDS);
 	}
 
+	private static String url(int port, String token) {
+		return "ws://localhost:" + port + "/ws" + (token == null ? "" : "?token=" + token);
+	}
+
 	public static TestSocket connect(int port, String token) throws Exception {
-		TestSocket socket = new TestSocket(port, token);
-		JsonNode ready = socket.next();
-		assertThat(ready.path("type").asString()).isEqualTo("ready");
-		return socket;
+		return ready(new TestSocket(url(port, token), new WebSocketHttpHeaders(), IGNORED_BY_DEFAULT));
+	}
+
+	public static TestSocket connectSeeingPresence(int port, String token) throws Exception {
+		return ready(new TestSocket(url(port, token), new WebSocketHttpHeaders(), Set.of()));
 	}
 
 	public static TestSocket connectWithoutReady(int port, String token) throws Exception {
-		return new TestSocket(port, token);
+		return new TestSocket(url(port, token), new WebSocketHttpHeaders(), IGNORED_BY_DEFAULT);
 	}
 
 	public static TestSocket connectFromOrigin(int port, String token, String origin) throws Exception {
 		WebSocketHttpHeaders headers = new WebSocketHttpHeaders();
 		headers.setOrigin(origin);
-		return new TestSocket(port, token, headers);
+		return new TestSocket(url(port, token), headers, IGNORED_BY_DEFAULT);
+	}
+
+	private static TestSocket ready(TestSocket socket) throws InterruptedException {
+		socket.next("ready");
+		return socket;
 	}
 
 	public void sendMessage(String roomId, String text) throws Exception {

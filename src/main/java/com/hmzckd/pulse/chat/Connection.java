@@ -1,6 +1,7 @@
 package com.hmzckd.pulse.chat;
 
 import java.io.IOException;
+import java.util.Map;
 import java.util.Set;
 import java.util.UUID;
 import java.util.concurrent.ConcurrentHashMap;
@@ -19,6 +20,7 @@ public final class Connection {
 	private final WebSocketSession session;
 	private final CurrentUser user;
 	private final Set<UUID> rooms = ConcurrentHashMap.newKeySet();
+	private final Map<UUID, Long> lastTypingAt = new ConcurrentHashMap<>();
 
 	Connection(WebSocketSession session, CurrentUser user) {
 		this.session = session;
@@ -39,6 +41,18 @@ public final class Connection {
 
 	Set<UUID> rooms() {
 		return rooms;
+	}
+
+	boolean mayAnnounceTyping(UUID roomId, long nowNanos, long intervalNanos) {
+		boolean[] allowed = { false };
+		lastTypingAt.compute(roomId, (id, last) -> {
+			if (last == null || nowNanos - last >= intervalNanos) {
+				allowed[0] = true;
+				return nowNanos;
+			}
+			return last;
+		});
+		return allowed[0];
 	}
 
 	void send(String json) {
