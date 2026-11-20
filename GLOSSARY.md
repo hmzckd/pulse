@@ -18,7 +18,7 @@
 | **Ack (`message.ack`)** | The server's answer to the sender: the message is stored, here is its `seq`. |
 | **Last read sequence (`last_read_seq`)** | The highest `seq` a member has read in a room. It only moves forward: the client sends `read` (roomId, seq), sending a message also marks it read for the sender, and new members start at the room's current `last_seq`. |
 | **Unread count** | `rooms.last_seq - room_members.last_read_seq`, returned by `GET /api/rooms/mine`. No messages are counted. |
-| **Server instance** | One running Pulse process. Several instances share the same PostgreSQL and Redis; `PULSE_INSTANCE_ID` names one (random when not set). |
+| **Server instance** | One running Pulse process. Several instances share the same PostgreSQL and Redis; `PULSE_INSTANCE_ID` names one (random when not set); `ready` tells the client which one it is on. |
 | **Relay** | Redis pub/sub between instances: channels `room:<id>`, `user:<id>` and `presence`. Every instance delivers frames from Redis to its own connections. Best effort: a lost frame is recovered with `sync`. |
 | **Slow consumer** | A connection that cannot keep up with the frames sent to it (a send takes over 5 seconds or 512 KB wait in its buffer). Closed with code `4008`; the client reconnects and syncs. |
 | **Heartbeat** | The server pings every connection every 25 seconds; one that sends no pong for 60 seconds is closed with code `4000`. |

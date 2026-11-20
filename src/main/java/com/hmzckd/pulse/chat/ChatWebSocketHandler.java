@@ -42,15 +42,17 @@ class ChatWebSocketHandler extends TextWebSocketHandler {
 	private final RoomService rooms;
 	private final MessageService messages;
 	private final JsonMapper json;
+	private final String instanceId;
 
 	ChatWebSocketHandler(ConnectionRegistry registry, Relay relay, Presence presence, RoomService rooms,
-			MessageService messages, JsonMapper json) {
+			MessageService messages, JsonMapper json, ServerInstance instance) {
 		this.registry = registry;
 		this.relay = relay;
 		this.presence = presence;
 		this.rooms = rooms;
 		this.messages = messages;
 		this.json = json;
+		this.instanceId = instance.id();
 	}
 
 	@Override
@@ -68,7 +70,7 @@ class ChatWebSocketHandler extends TextWebSocketHandler {
 		if (firstForUser) {
 			presence.cameOnline(user, roomIds);
 		}
-		connection.sendReady(json.writeValueAsString(ServerEvents.Ready.of(user.username(), roomIds,
+		connection.sendReady(json.writeValueAsString(ServerEvents.Ready.of(user.username(), instanceId, roomIds,
 				presence.onlineAmong(rooms.roommatesOf(user.id())))));
 	}
 

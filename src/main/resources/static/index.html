@@ -1,0 +1,53 @@
+<!doctype html>
+<html lang="en">
+<head>
+	<meta charset="utf-8">
+	<meta name="viewport" content="width=device-width, initial-scale=1">
+	<title>Pulse</title>
+	<link rel="stylesheet" href="app.css">
+</head>
+<body>
+	<header>
+		<h1>Pulse</h1>
+		<span id="me"></span>
+		<span id="server" class="pill"></span>
+		<span id="status" class="pill">offline</span>
+	</header>
+
+	<main id="login-view">
+		<form id="login-form" class="card">
+			<label for="username">Username</label>
+			<input id="username" autocomplete="off" required pattern="[A-Za-z0-9_]{3,20}" placeholder="ali">
+			<button type="submit">Join</button>
+			<p class="hint">3-20 letters, digits or _. No password: this is a demo.</p>
+		</form>
+	</main>
+
+	<main id="chat-view" hidden>
+		<aside>
+			<h2>My rooms</h2>
+			<ul id="my-rooms"></ul>
+			<form id="create-form">
+				<input id="room-name" maxlength="50" placeholder="New room" required>
+				<button type="submit">Create</button>
+			</form>
+			<h2>Other rooms</h2>
+			<ul id="other-rooms"></ul>
+		</aside>
+		<section id="room">
+			<div id="room-header">
+				<h2 id="room-title">Pick a room</h2>
+				<span id="online"></span>
+			</div>
+			<ol id="messages"></ol>
+			<p id="typing"></p>
+			<form id="send-form">
+				<input id="text" maxlength="2000" autocomplete="off" placeholder="Write a message" disabled>
+				<button type="submit" disabled>Send</button>
+			</form>
+		</section>
+	</main>
+
+	<script src="app.js"></script>
+</body>
+</html>

@@ -10,7 +10,6 @@ import java.util.UUID;
 
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
-import org.springframework.beans.factory.annotation.Value;
 import org.springframework.data.redis.core.RedisCallback;
 import org.springframework.data.redis.core.StringRedisTemplate;
 import org.springframework.scheduling.annotation.Scheduled;
@@ -31,12 +30,11 @@ class Presence {
 	private final Relay relay;
 	private final String instanceId;
 
-	Presence(StringRedisTemplate redis, ConnectionRegistry registry, Relay relay,
-			@Value("${pulse.instance-id}") String instanceId) {
+	Presence(StringRedisTemplate redis, ConnectionRegistry registry, Relay relay, ServerInstance instance) {
 		this.redis = redis;
 		this.registry = registry;
 		this.relay = relay;
-		this.instanceId = instanceId;
+		this.instanceId = instance.id();
 	}
 
 	static String key(UUID userId) {

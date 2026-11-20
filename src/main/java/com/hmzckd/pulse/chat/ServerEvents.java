@@ -12,10 +12,10 @@ final class ServerEvents {
 	private ServerEvents() {
 	}
 
-	record Ready(String type, String username, List<UUID> rooms, Set<String> online) {
+	record Ready(String type, String username, String server, List<UUID> rooms, Set<String> online) {
 
-		static Ready of(String username, List<UUID> rooms, Set<String> online) {
-			return new Ready("ready", username, rooms, online);
+		static Ready of(String username, String server, List<UUID> rooms, Set<String> online) {
+			return new Ready("ready", username, server, rooms, online);
 		}
 	}
 
