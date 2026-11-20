@@ -33,7 +33,8 @@ class RoomRepository {
 
 	void addMember(UUID roomId, UUID userId) {
 		jdbc.sql("""
-				INSERT INTO room_members (room_id, user_id) VALUES (:roomId, :userId)
+				INSERT INTO room_members (room_id, user_id, last_read_seq)
+				SELECT :roomId, :userId, last_seq FROM rooms WHERE id = :roomId
 				ON CONFLICT (room_id, user_id) DO NOTHING
 				""")
 				.param("roomId", roomId)
@@ -80,7 +81,7 @@ class RoomRepository {
 
 	List<MyRoomResponse> findByMember(UUID userId) {
 		return jdbc.sql("""
-				SELECT r.id, r.name, m.joined_at
+				SELECT r.id, r.name, m.joined_at, r.last_seq, m.last_read_seq
 				FROM room_members m JOIN rooms r ON r.id = m.room_id
 				WHERE m.user_id = :userId
 				ORDER BY m.joined_at, r.id
@@ -89,8 +90,26 @@ class RoomRepository {
 				.query((rs, n) -> new MyRoomResponse(
 						rs.getObject("id", UUID.class),
 						rs.getString("name"),
-						toInstant(rs.getObject("joined_at", OffsetDateTime.class))))
+						toInstant(rs.getObject("joined_at", OffsetDateTime.class)),
+						rs.getLong("last_seq"),
+						rs.getLong("last_read_seq"),
+						rs.getLong("last_seq") - rs.getLong("last_read_seq")))
 				.list();
+	}
+
+	long markRead(UUID roomId, UUID userId, long seq) {
+		return jdbc.sql("""
+				UPDATE room_members m
+				SET last_read_seq = GREATEST(m.last_read_seq, LEAST(:seq, r.last_seq))
+				FROM rooms r
+				WHERE r.id = m.room_id AND m.room_id = :roomId AND m.user_id = :userId
+				RETURNING m.last_read_seq
+				""")
+				.param("roomId", roomId)
+				.param("userId", userId)
+				.param("seq", seq)
+				.query(Long.class)
+				.single();
 	}
 
 	List<UUID> findRoomIdsByMember(UUID userId) {

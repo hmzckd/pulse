@@ -53,6 +53,17 @@ class MessageRepository {
 				.update();
 	}
 
+	void markReadBySender(UUID roomId, UUID senderId, long seq) {
+		jdbc.sql("""
+				UPDATE room_members SET last_read_seq = GREATEST(last_read_seq, :seq)
+				WHERE room_id = :roomId AND user_id = :senderId
+				""")
+				.param("roomId", roomId)
+				.param("senderId", senderId)
+				.param("seq", seq)
+				.update();
+	}
+
 	Optional<StoredMessage> findById(UUID id) {
 		return jdbc.sql(SELECT_MESSAGE + " WHERE m.id = :id")
 				.param("id", id)

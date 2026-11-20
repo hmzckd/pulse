@@ -87,6 +87,7 @@ class ChatWebSocketHandler extends TextWebSocketHandler {
 			case "message.send" -> onMessageSend(connection, node);
 			case "sync" -> onSync(connection, node);
 			case "typing" -> onTyping(connection, node);
+			case "read" -> onRead(connection, node);
 			default -> sendError(connection, "unknown_type", "unknown message type: " + type);
 		}
 	}
@@ -156,6 +157,24 @@ class ChatWebSocketHandler extends TextWebSocketHandler {
 			if (!member.user().id().equals(connection.user().id())) {
 				member.send(payload);
 			}
+		}
+	}
+
+	private void onRead(Connection connection, JsonNode node) {
+		UUID roomId = parseUuid(node.path("roomId").asString(""));
+		JsonNode seq = node.path("seq");
+		if (roomId == null || !seq.isIntegralNumber() || seq.asLong() < 0) {
+			sendError(connection, "invalid_message", "read needs a roomId and a seq of 0 or more");
+			return;
+		}
+		if (!connection.isIn(roomId)) {
+			sendError(connection, "not_a_member", "not a member of room " + roomId);
+			return;
+		}
+		long lastRead = rooms.markRead(roomId, connection.user().id(), seq.asLong());
+		String payload = json.writeValueAsString(ServerEvents.Read.of(roomId, lastRead));
+		for (Connection tab : registry.ofUser(connection.user().id())) {
+			tab.send(payload);
 		}
 	}
 

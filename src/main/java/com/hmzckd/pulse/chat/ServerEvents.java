@@ -57,6 +57,13 @@ final class ServerEvents {
 		}
 	}
 
+	record Read(String type, UUID roomId, long seq) {
+
+		static Read of(UUID roomId, long seq) {
+			return new Read("read", roomId, seq);
+		}
+	}
+
 	record Error(String type, String code, String message) {
 
 		static Error of(String code, String message) {

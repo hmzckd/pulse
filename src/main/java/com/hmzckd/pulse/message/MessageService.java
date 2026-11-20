@@ -37,6 +37,7 @@ public class MessageService {
 		long seq = messages.nextSeq(roomId);
 		UUID id = UUID.randomUUID();
 		messages.insert(id, roomId, seq, senderId, clientMsgId, text);
+		messages.markReadBySender(roomId, senderId, seq);
 		return new SaveResult(messages.findById(id).orElseThrow(), false);
 	}
 

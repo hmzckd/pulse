@@ -67,6 +67,11 @@ public class RoomService {
 		return rooms.findByMember(userId);
 	}
 
+	@Transactional
+	public long markRead(UUID roomId, UUID userId, long seq) {
+		return rooms.markRead(roomId, userId, seq);
+	}
+
 	public List<UUID> roomIdsOf(UUID userId) {
 		return rooms.findRoomIdsByMember(userId);
 	}
