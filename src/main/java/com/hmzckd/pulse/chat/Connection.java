@@ -1,6 +1,7 @@
 package com.hmzckd.pulse.chat;
 
 import java.io.IOException;
+import java.time.Duration;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
@@ -11,8 +12,12 @@ import java.util.concurrent.locks.ReentrantLock;
 
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+import org.springframework.web.socket.CloseStatus;
+import org.springframework.web.socket.PingMessage;
 import org.springframework.web.socket.TextMessage;
-import org.springframework.web.socket.WebSocketSession;
+import org.springframework.web.socket.WebSocketMessage;
+import org.springframework.web.socket.handler.ConcurrentWebSocketSessionDecorator;
+import org.springframework.web.socket.handler.SessionLimitExceededException;
 
 import com.hmzckd.pulse.auth.CurrentUser;
 
@@ -20,16 +25,25 @@ public final class Connection {
 
 	private static final Logger log = LoggerFactory.getLogger(Connection.class);
 
-	private final WebSocketSession session;
+	static final CloseStatus SLOW_CONSUMER = new CloseStatus(4008, "slow consumer");
+	static final CloseStatus NO_PONG = new CloseStatus(4000, "no pong");
+	static final int MESSAGE_LIMIT = 20;
+	static final Duration MESSAGE_WINDOW = Duration.ofSeconds(10);
+
+	private final ConcurrentWebSocketSessionDecorator session;
 	private final CurrentUser user;
 	private final Set<UUID> rooms = ConcurrentHashMap.newKeySet();
 	private final Map<UUID, Long> lastTypingAt = new ConcurrentHashMap<>();
+	private final RateLimiter messages;
 	private final ReentrantLock gate = new ReentrantLock();
 	private List<String> beforeReady = new ArrayList<>();
+	private volatile long lastPongAt;
 
-	Connection(WebSocketSession session, CurrentUser user) {
+	Connection(ConcurrentWebSocketSessionDecorator session, CurrentUser user, long nowNanos) {
 		this.session = session;
 		this.user = user;
+		this.messages = new RateLimiter(MESSAGE_LIMIT, MESSAGE_WINDOW, nowNanos);
+		this.lastPongAt = nowNanos;
 	}
 
 	public String id() {
@@ -60,6 +74,18 @@ public final class Connection {
 		return allowed[0];
 	}
 
+	boolean maySendMessage(long nowNanos) {
+		return messages.tryAcquire(nowNanos);
+	}
+
+	void pongReceived(long nowNanos) {
+		lastPongAt = nowNanos;
+	}
+
+	boolean silentLongerThan(Duration timeout, long nowNanos) {
+		return nowNanos - lastPongAt > timeout.toNanos();
+	}
+
 	void send(String json) {
 		gate.lock();
 		try {
@@ -71,14 +97,14 @@ public final class Connection {
 		finally {
 			gate.unlock();
 		}
-		write(json);
+		write(new TextMessage(json));
 	}
 
 	void sendReady(String readyFrame) {
 		gate.lock();
 		try {
-			write(readyFrame);
-			beforeReady.forEach(this::write);
+			write(new TextMessage(readyFrame));
+			beforeReady.forEach(json -> write(new TextMessage(json)));
 			beforeReady = null;
 		}
 		finally {
@@ -86,9 +112,26 @@ public final class Connection {
 		}
 	}
 
-	private void write(String json) {
+	void ping() {
+		write(new PingMessage());
+	}
+
+	void close(CloseStatus status) {
 		try {
-			session.sendMessage(new TextMessage(json));
+			session.getDelegate().close(status);
+		}
+		catch (IOException | RuntimeException ex) {
+			log.warn("Could not close connection {} of {}: {}", id(), user.username(), ex.getMessage());
+		}
+	}
+
+	private void write(WebSocketMessage<?> message) {
+		try {
+			session.sendMessage(message);
+		}
+		catch (SessionLimitExceededException ex) {
+			log.warn("Closing slow connection {} of {}: {}", id(), user.username(), ex.getMessage());
+			close(SLOW_CONSUMER);
 		}
 		catch (IOException | RuntimeException ex) {
 			log.warn("Could not send to connection {} of {}: {}", id(), user.username(), ex.getMessage());

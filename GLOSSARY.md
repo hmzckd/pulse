@@ -20,3 +20,6 @@
 | **Unread count** | `rooms.last_seq - room_members.last_read_seq`, returned by `GET /api/rooms/mine`. No messages are counted. |
 | **Server instance** | One running Pulse process. Several instances share the same PostgreSQL and Redis; `PULSE_INSTANCE_ID` names one (random when not set). |
 | **Relay** | Redis pub/sub between instances: channels `room:<id>`, `user:<id>` and `presence`. Every instance delivers frames from Redis to its own connections. Best effort: a lost frame is recovered with `sync`. |
+| **Slow consumer** | A connection that cannot keep up with the frames sent to it (a send takes over 5 seconds or 512 KB wait in its buffer). Closed with code `4008`; the client reconnects and syncs. |
+| **Heartbeat** | The server pings every connection every 25 seconds; one that sends no pong for 60 seconds is closed with code `4000`. |
+| **Rate limit** | At most 20 `message.send` frames per connection in 10 seconds. Extra ones get `error` `rate_limited`. |

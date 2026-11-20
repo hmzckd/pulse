@@ -60,6 +60,10 @@ public class ConnectionRegistry {
 		return connections == null ? List.of() : connections;
 	}
 
+	Collection<Connection> all() {
+		return byId.values();
+	}
+
 	Set<UUID> userIds() {
 		return byUser.keySet();
 	}

@@ -8,6 +8,7 @@ import java.util.UUID;
 
 import org.springframework.stereotype.Component;
 import org.springframework.web.socket.CloseStatus;
+import org.springframework.web.socket.PongMessage;
 import org.springframework.web.socket.TextMessage;
 import org.springframework.web.socket.WebSocketSession;
 import org.springframework.web.socket.handler.ConcurrentWebSocketSessionDecorator;
@@ -55,9 +56,9 @@ class ChatWebSocketHandler extends TextWebSocketHandler {
 	@Override
 	public void afterConnectionEstablished(WebSocketSession session) {
 		CurrentUser user = (CurrentUser) session.getAttributes().get(TokenHandshakeInterceptor.USER_ATTRIBUTE);
-		WebSocketSession safe = new ConcurrentWebSocketSessionDecorator(session, SEND_TIME_LIMIT_MS,
+		ConcurrentWebSocketSessionDecorator safe = new ConcurrentWebSocketSessionDecorator(session, SEND_TIME_LIMIT_MS,
 				BUFFER_SIZE_LIMIT_BYTES);
-		Connection connection = new Connection(safe, user);
+		Connection connection = new Connection(safe, user, System.nanoTime());
 		boolean firstForUser = registry.add(connection);
 		List<UUID> roomIds = rooms.roomIdsOf(user.id());
 		for (UUID roomId : roomIds) {
@@ -96,6 +97,14 @@ class ChatWebSocketHandler extends TextWebSocketHandler {
 	}
 
 	@Override
+	protected void handlePongMessage(WebSocketSession session, PongMessage message) {
+		Connection connection = registry.get(session.getId());
+		if (connection != null) {
+			connection.pongReceived(System.nanoTime());
+		}
+	}
+
+	@Override
 	public void afterConnectionClosed(WebSocketSession session, CloseStatus status) {
 		ConnectionRegistry.Removed removed = registry.remove(session.getId());
 		if (removed == null) {
@@ -126,6 +135,11 @@ class ChatWebSocketHandler extends TextWebSocketHandler {
 		}
 		if (!connection.isIn(roomId)) {
 			sendError(connection, "not_a_member", "join the room before sending messages");
+			return;
+		}
+		if (!connection.maySendMessage(System.nanoTime())) {
+			sendError(connection, "rate_limited", "at most " + Connection.MESSAGE_LIMIT + " messages every "
+					+ Connection.MESSAGE_WINDOW.toSeconds() + " seconds, try again with the same clientMsgId");
 			return;
 		}
 		MessageService.SaveResult result;

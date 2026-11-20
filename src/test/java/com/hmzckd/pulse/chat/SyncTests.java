@@ -111,14 +111,14 @@ class SyncTests {
 		String ayseToken = TestUsers.login(mockMvc, TestUsers.uniqueName("ayse"));
 		String roomId = TestApi.createRoom(mockMvc, aliToken, "Busy");
 		TestApi.join(mockMvc, ayseToken, roomId);
-		int total = 60;
+		int total = Connection.MESSAGE_LIMIT;
 
 		try (TestSocket aliSocket = TestSocket.connect(port, aliToken)) {
 			CompletableFuture<Void> sending = CompletableFuture.runAsync(() -> {
 				try {
 					for (int i = 0; i < total; i++) {
 						aliSocket.sendMessage(roomId, "m" + i);
-						Thread.sleep(2);
+						Thread.sleep(5);
 					}
 				}
 				catch (Exception ex) {
