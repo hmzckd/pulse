@@ -14,6 +14,8 @@ import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.web.server.LocalServerPort;
 import org.springframework.test.web.servlet.MockMvc;
 
+import io.micrometer.core.instrument.MeterRegistry;
+
 import com.hmzckd.pulse.IntegrationTest;
 import com.hmzckd.pulse.RawSocket;
 import com.hmzckd.pulse.TestApi;
@@ -32,10 +34,15 @@ class ProtectionTests {
 	@Autowired
 	ConnectionRegistry registry;
 
+	@Autowired
+	MeterRegistry meters;
+
 	@Test
 	void moreThanTwentyMessagesInTenSecondsAreRateLimited() throws Exception {
 		String aliToken = TestUsers.login(mockMvc, TestUsers.uniqueName("ali"));
 		String roomId = TestApi.createRoom(mockMvc, aliToken, "Genel");
+
+		double limitedBefore = meters.get("pulse.messages.rate.limited").counter().count();
 
 		try (TestSocket ali = TestSocket.connect(port, aliToken)) {
 			for (int i = 0; i < 30; i++) {
@@ -53,6 +60,7 @@ class ProtectionTests {
 					.containsEntry("error rate_limited", 10);
 			assertThat(ali.isOpen()).isTrue();
 		}
+		assertThat(meters.get("pulse.messages.rate.limited").counter().count()).isEqualTo(limitedBefore + 10);
 	}
 
 	@Test
@@ -60,6 +68,7 @@ class ProtectionTests {
 		String ayseName = TestUsers.uniqueName("ayse");
 		String ayseToken = TestUsers.login(mockMvc, ayseName);
 		String frame = "{\"type\":\"message.new\",\"text\":\"" + "x".repeat(64 * 1024) + "\"}";
+		double closedBefore = slowConsumerCloses();
 
 		try (RawSocket ayse = RawSocket.connect(port, ayseToken)) {
 			await().atMost(Duration.ofSeconds(5)).until(() -> connectionOf(ayseName) != null);
@@ -73,6 +82,11 @@ class ProtectionTests {
 			}
 			assertThat(ayse.awaitCloseCode(Duration.ofSeconds(10))).isEqualTo(4008);
 		}
+		assertThat(slowConsumerCloses()).isEqualTo(closedBefore + 1);
+	}
+
+	private double slowConsumerCloses() {
+		return meters.get("pulse.connections.closed").tag("reason", "slow_consumer").counter().count();
 	}
 
 	private Connection connectionOf(String username) {

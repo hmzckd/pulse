@@ -49,7 +49,7 @@ class SecurityConfig {
 				.authorizeHttpRequests(auth -> auth
 						.requestMatchers(HttpMethod.POST, "/api/sessions").permitAll()
 						.requestMatchers(HttpMethod.GET, "/", "/index.html", "/app.js", "/app.css").permitAll()
-						.requestMatchers("/actuator/health", "/error").permitAll()
+						.requestMatchers("/actuator/health", "/actuator/prometheus", "/error").permitAll()
 						.requestMatchers("/ws").permitAll()
 						.anyRequest().authenticated())
 				.oauth2ResourceServer(oauth -> oauth

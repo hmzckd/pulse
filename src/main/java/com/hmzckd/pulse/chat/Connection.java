@@ -8,6 +8,7 @@ import java.util.Map;
 import java.util.Set;
 import java.util.UUID;
 import java.util.concurrent.ConcurrentHashMap;
+import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.locks.ReentrantLock;
 
 import org.slf4j.Logger;
@@ -32,16 +33,19 @@ public final class Connection {
 
 	private final ConcurrentWebSocketSessionDecorator session;
 	private final CurrentUser user;
+	private final ChatMetrics metrics;
 	private final Set<UUID> rooms = ConcurrentHashMap.newKeySet();
 	private final Map<UUID, Long> lastTypingAt = new ConcurrentHashMap<>();
 	private final RateLimiter messages;
 	private final ReentrantLock gate = new ReentrantLock();
 	private List<String> beforeReady = new ArrayList<>();
 	private volatile long lastPongAt;
+	private final AtomicBoolean closing = new AtomicBoolean();
 
-	Connection(ConcurrentWebSocketSessionDecorator session, CurrentUser user, long nowNanos) {
+	Connection(ConcurrentWebSocketSessionDecorator session, CurrentUser user, ChatMetrics metrics, long nowNanos) {
 		this.session = session;
 		this.user = user;
+		this.metrics = metrics;
 		this.messages = new RateLimiter(MESSAGE_LIMIT, MESSAGE_WINDOW, nowNanos);
 		this.lastPongAt = nowNanos;
 	}
@@ -117,6 +121,10 @@ public final class Connection {
 	}
 
 	void close(CloseStatus status) {
+		if (!closing.compareAndSet(false, true)) {
+			return;
+		}
+		metrics.closedByServer(status);
 		try {
 			session.getDelegate().close(status);
 		}

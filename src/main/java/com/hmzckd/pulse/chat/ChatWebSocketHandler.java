@@ -42,16 +42,18 @@ class ChatWebSocketHandler extends TextWebSocketHandler {
 	private final RoomService rooms;
 	private final MessageService messages;
 	private final JsonMapper json;
+	private final ChatMetrics metrics;
 	private final String instanceId;
 
 	ChatWebSocketHandler(ConnectionRegistry registry, Relay relay, Presence presence, RoomService rooms,
-			MessageService messages, JsonMapper json, ServerInstance instance) {
+			MessageService messages, JsonMapper json, ChatMetrics metrics, ServerInstance instance) {
 		this.registry = registry;
 		this.relay = relay;
 		this.presence = presence;
 		this.rooms = rooms;
 		this.messages = messages;
 		this.json = json;
+		this.metrics = metrics;
 		this.instanceId = instance.id();
 	}
 
@@ -60,7 +62,7 @@ class ChatWebSocketHandler extends TextWebSocketHandler {
 		CurrentUser user = (CurrentUser) session.getAttributes().get(TokenHandshakeInterceptor.USER_ATTRIBUTE);
 		ConcurrentWebSocketSessionDecorator safe = new ConcurrentWebSocketSessionDecorator(session, SEND_TIME_LIMIT_MS,
 				BUFFER_SIZE_LIMIT_BYTES);
-		Connection connection = new Connection(safe, user, System.nanoTime());
+		Connection connection = new Connection(safe, user, metrics, System.nanoTime());
 		boolean firstForUser = registry.add(connection);
 		List<UUID> roomIds = rooms.roomIdsOf(user.id());
 		for (UUID roomId : roomIds) {
@@ -140,6 +142,7 @@ class ChatWebSocketHandler extends TextWebSocketHandler {
 			return;
 		}
 		if (!connection.maySendMessage(System.nanoTime())) {
+			metrics.rateLimited();
 			sendError(connection, "rate_limited", "at most " + Connection.MESSAGE_LIMIT + " messages every "
 					+ Connection.MESSAGE_WINDOW.toSeconds() + " seconds, try again with the same clientMsgId");
 			return;
@@ -157,6 +160,7 @@ class ChatWebSocketHandler extends TextWebSocketHandler {
 		if (result.duplicate()) {
 			return;
 		}
+		metrics.messageSent();
 		relay.toRoom(roomId, null, json.writeValueAsString(ServerEvents.MessageNew.of(result.message())));
 	}
 
