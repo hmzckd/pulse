@@ -4,6 +4,8 @@ import java.time.Instant;
 import java.util.List;
 import java.util.UUID;
 
+import com.hmzckd.pulse.message.StoredMessage;
+
 final class ServerEvents {
 
 	private ServerEvents() {
@@ -16,10 +18,19 @@ final class ServerEvents {
 		}
 	}
 
-	record MessageNew(String type, UUID roomId, String sender, String text, Instant sentAt) {
+	record MessageNew(String type, UUID id, UUID roomId, long seq, String sender, String text, Instant sentAt) {
 
-		static MessageNew of(UUID roomId, String sender, String text, Instant sentAt) {
-			return new MessageNew("message.new", roomId, sender, text, sentAt);
+		static MessageNew of(StoredMessage message) {
+			return new MessageNew("message.new", message.id(), message.roomId(), message.seq(), message.sender(),
+					message.text(), message.sentAt());
+		}
+	}
+
+	record MessageAck(String type, UUID clientMsgId, UUID id, UUID roomId, long seq, Instant sentAt) {
+
+		static MessageAck of(StoredMessage message) {
+			return new MessageAck("message.ack", message.clientMsgId(), message.id(), message.roomId(), message.seq(),
+					message.sentAt());
 		}
 	}
 

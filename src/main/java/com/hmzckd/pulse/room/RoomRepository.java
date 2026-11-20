@@ -48,6 +48,14 @@ class RoomRepository {
 				.single();
 	}
 
+	boolean isMember(UUID roomId, UUID userId) {
+		return jdbc.sql("SELECT EXISTS (SELECT 1 FROM room_members WHERE room_id = :roomId AND user_id = :userId)")
+				.param("roomId", roomId)
+				.param("userId", userId)
+				.query(Boolean.class)
+				.single();
+	}
+
 	Optional<RoomResponse> findById(UUID id) {
 		return jdbc.sql(SELECT_ROOM + " WHERE r.id = :id")
 				.param("id", id)

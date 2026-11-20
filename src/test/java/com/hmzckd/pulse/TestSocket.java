@@ -1,8 +1,9 @@
-package com.hmzckd.pulse.chat;
+package com.hmzckd.pulse;
 
 import static org.assertj.core.api.Assertions.assertThat;
 
 import java.net.URI;
+import java.util.UUID;
 import java.util.concurrent.BlockingQueue;
 import java.util.concurrent.LinkedBlockingQueue;
 import java.util.concurrent.TimeUnit;
@@ -17,7 +18,7 @@ import org.springframework.web.socket.handler.TextWebSocketHandler;
 import tools.jackson.databind.JsonNode;
 import tools.jackson.databind.json.JsonMapper;
 
-final class TestSocket implements AutoCloseable {
+public final class TestSocket implements AutoCloseable {
 
 	private static final JsonMapper JSON = JsonMapper.builder().build();
 
@@ -41,39 +42,54 @@ final class TestSocket implements AutoCloseable {
 				.get(5, TimeUnit.SECONDS);
 	}
 
-	static TestSocket connect(int port, String token) throws Exception {
+	public static TestSocket connect(int port, String token) throws Exception {
 		TestSocket socket = new TestSocket(port, token);
 		JsonNode ready = socket.next();
 		assertThat(ready.path("type").asString()).isEqualTo("ready");
 		return socket;
 	}
 
-	static TestSocket connectWithoutReady(int port, String token) throws Exception {
+	public static TestSocket connectWithoutReady(int port, String token) throws Exception {
 		return new TestSocket(port, token);
 	}
 
-	static TestSocket connectFromOrigin(int port, String token, String origin) throws Exception {
+	public static TestSocket connectFromOrigin(int port, String token, String origin) throws Exception {
 		WebSocketHttpHeaders headers = new WebSocketHttpHeaders();
 		headers.setOrigin(origin);
 		return new TestSocket(port, token, headers);
 	}
 
-	void send(String raw) throws Exception {
+	public void sendMessage(String roomId, String text) throws Exception {
+		sendMessage(roomId, UUID.randomUUID().toString(), text);
+	}
+
+	public void sendMessage(String roomId, String clientMsgId, String text) throws Exception {
+		send("{\"type\":\"message.send\",\"roomId\":\"" + roomId + "\",\"clientMsgId\":\"" + clientMsgId
+				+ "\",\"text\":\"" + text + "\"}");
+	}
+
+	public void send(String raw) throws Exception {
 		session.sendMessage(new TextMessage(raw));
 	}
 
-	JsonNode next() throws InterruptedException {
+	public JsonNode next() throws InterruptedException {
 		JsonNode node = received.poll(5, TimeUnit.SECONDS);
 		assertThat(node).as("expected a message within 5 seconds").isNotNull();
 		return node;
 	}
 
-	void expectNothing() throws InterruptedException {
+	public JsonNode next(String type) throws InterruptedException {
+		JsonNode node = next();
+		assertThat(node.path("type").asString()).as("type of " + node).isEqualTo(type);
+		return node;
+	}
+
+	public void expectNothing() throws InterruptedException {
 		JsonNode node = received.poll(300, TimeUnit.MILLISECONDS);
 		assertThat(node).as("expected no message").isNull();
 	}
 
-	boolean isOpen() {
+	public boolean isOpen() {
 		return session.isOpen();
 	}
 

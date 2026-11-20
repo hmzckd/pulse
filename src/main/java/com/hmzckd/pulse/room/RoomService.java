@@ -8,6 +8,7 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 import com.hmzckd.pulse.web.BadRequestException;
+import com.hmzckd.pulse.web.ForbiddenException;
 import com.hmzckd.pulse.web.NotFoundException;
 
 @Service
@@ -51,6 +52,15 @@ public class RoomService {
 		}
 		rooms.addMember(roomId, userId);
 		events.publishEvent(new MemberJoined(roomId, userId));
+	}
+
+	public void requireMember(UUID roomId, UUID userId) {
+		if (!rooms.exists(roomId)) {
+			throw new NotFoundException("room " + roomId + " not found");
+		}
+		if (!rooms.isMember(roomId, userId)) {
+			throw new ForbiddenException("join the room to read its messages");
+		}
 	}
 
 	public List<MyRoomResponse> roomsOf(UUID userId) {

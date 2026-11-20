@@ -1,6 +1,5 @@
 package com.hmzckd.pulse.chat;
 
-import java.time.Instant;
 import java.util.List;
 import java.util.UUID;
 
@@ -11,7 +10,11 @@ import org.springframework.web.socket.WebSocketSession;
 import org.springframework.web.socket.handler.ConcurrentWebSocketSessionDecorator;
 import org.springframework.web.socket.handler.TextWebSocketHandler;
 
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
+
 import com.hmzckd.pulse.auth.CurrentUser;
+import com.hmzckd.pulse.message.MessageService;
 import com.hmzckd.pulse.room.RoomService;
 
 import tools.jackson.core.JacksonException;
@@ -21,17 +24,20 @@ import tools.jackson.databind.json.JsonMapper;
 @Component
 class ChatWebSocketHandler extends TextWebSocketHandler {
 
-	static final int MAX_TEXT_LENGTH = 2000;
+	private static final Logger log = LoggerFactory.getLogger(ChatWebSocketHandler.class);
+	static final int MAX_TEXT_LENGTH = MessageService.MAX_TEXT_LENGTH;
 	private static final int SEND_TIME_LIMIT_MS = 5_000;
 	private static final int BUFFER_SIZE_LIMIT_BYTES = 512 * 1024;
 
 	private final ConnectionRegistry registry;
 	private final RoomService rooms;
+	private final MessageService messages;
 	private final JsonMapper json;
 
-	ChatWebSocketHandler(ConnectionRegistry registry, RoomService rooms, JsonMapper json) {
+	ChatWebSocketHandler(ConnectionRegistry registry, RoomService rooms, MessageService messages, JsonMapper json) {
 		this.registry = registry;
 		this.rooms = rooms;
+		this.messages = messages;
 		this.json = json;
 	}
 
@@ -77,9 +83,14 @@ class ChatWebSocketHandler extends TextWebSocketHandler {
 
 	private void onMessageSend(Connection connection, JsonNode node) {
 		UUID roomId = parseUuid(node.path("roomId").asString(""));
+		UUID clientMsgId = parseUuid(node.path("clientMsgId").asString(""));
 		String text = node.path("text").asString("");
 		if (roomId == null) {
 			sendError(connection, "invalid_message", "roomId must be a UUID");
+			return;
+		}
+		if (clientMsgId == null) {
+			sendError(connection, "invalid_message", "clientMsgId must be a UUID");
 			return;
 		}
 		if (text.isBlank() || text.length() > MAX_TEXT_LENGTH) {
@@ -90,8 +101,20 @@ class ChatWebSocketHandler extends TextWebSocketHandler {
 			sendError(connection, "not_a_member", "join the room before sending messages");
 			return;
 		}
-		String payload = json.writeValueAsString(
-				ServerEvents.MessageNew.of(roomId, connection.user().username(), text, Instant.now()));
+		MessageService.SaveResult result;
+		try {
+			result = messages.save(roomId, connection.user().id(), clientMsgId, text);
+		}
+		catch (RuntimeException ex) {
+			log.error("Could not save message {} in room {}", clientMsgId, roomId, ex);
+			sendError(connection, "save_failed", "message was not saved, try again with the same clientMsgId");
+			return;
+		}
+		connection.send(json.writeValueAsString(ServerEvents.MessageAck.of(result.message())));
+		if (result.duplicate()) {
+			return;
+		}
+		String payload = json.writeValueAsString(ServerEvents.MessageNew.of(result.message()));
 		for (Connection member : registry.inRoom(roomId)) {
 			member.send(payload);
 		}
