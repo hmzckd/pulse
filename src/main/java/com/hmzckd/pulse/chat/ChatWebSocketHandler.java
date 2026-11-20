@@ -1,6 +1,8 @@
 package com.hmzckd.pulse.chat;
 
+import java.util.LinkedHashMap;
 import java.util.List;
+import java.util.Map;
 import java.util.UUID;
 
 import org.springframework.stereotype.Component;
@@ -26,6 +28,7 @@ class ChatWebSocketHandler extends TextWebSocketHandler {
 
 	private static final Logger log = LoggerFactory.getLogger(ChatWebSocketHandler.class);
 	static final int MAX_TEXT_LENGTH = MessageService.MAX_TEXT_LENGTH;
+	static final int MAX_SYNC_ROOMS = 100;
 	private static final int SEND_TIME_LIMIT_MS = 5_000;
 	private static final int BUFFER_SIZE_LIMIT_BYTES = 512 * 1024;
 
@@ -72,6 +75,7 @@ class ChatWebSocketHandler extends TextWebSocketHandler {
 		String type = node.path("type").asString("");
 		switch (type) {
 			case "message.send" -> onMessageSend(connection, node);
+			case "sync" -> onSync(connection, node);
 			default -> sendError(connection, "unknown_type", "unknown message type: " + type);
 		}
 	}
@@ -118,6 +122,34 @@ class ChatWebSocketHandler extends TextWebSocketHandler {
 		for (Connection member : registry.inRoom(roomId)) {
 			member.send(payload);
 		}
+	}
+
+	private void onSync(Connection connection, JsonNode node) {
+		JsonNode requested = node.path("rooms");
+		if (!requested.isObject() || requested.size() > MAX_SYNC_ROOMS) {
+			sendError(connection, "invalid_sync", "rooms must be an object of roomId to last seen seq (max "
+					+ MAX_SYNC_ROOMS + ")");
+			return;
+		}
+		Map<UUID, Long> lastSeen = new LinkedHashMap<>();
+		for (Map.Entry<String, JsonNode> entry : requested.properties()) {
+			UUID roomId = parseUuid(entry.getKey());
+			JsonNode seq = entry.getValue();
+			if (roomId == null || !seq.isIntegralNumber() || seq.asLong() < 0) {
+				sendError(connection, "invalid_sync", "each entry must be a roomId and a seq of 0 or more");
+				return;
+			}
+			if (!connection.isIn(roomId)) {
+				sendError(connection, "not_a_member", "not a member of room " + roomId);
+				return;
+			}
+			lastSeen.put(roomId, seq.asLong());
+		}
+		lastSeen.forEach((roomId, seq) -> {
+			MessageService.SyncPage page = messages.since(roomId, seq);
+			connection.send(json.writeValueAsString(
+					ServerEvents.SyncMessages.of(roomId, page.messages(), page.truncated())));
+		});
 	}
 
 	private void sendError(Connection connection, String code, String message) {

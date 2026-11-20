@@ -34,6 +34,14 @@ final class ServerEvents {
 		}
 	}
 
+	record SyncMessages(String type, UUID roomId, List<MessageNew> messages, boolean truncated) {
+
+		static SyncMessages of(UUID roomId, List<StoredMessage> messages, boolean truncated) {
+			return new SyncMessages("sync.messages", roomId, messages.stream().map(MessageNew::of).toList(),
+					truncated);
+		}
+	}
+
 	record Error(String type, String code, String message) {
 
 		static Error of(String code, String message) {

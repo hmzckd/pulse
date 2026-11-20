@@ -3,6 +3,9 @@ package com.hmzckd.pulse;
 import static org.assertj.core.api.Assertions.assertThat;
 
 import java.net.URI;
+
+import jakarta.websocket.ContainerProvider;
+import jakarta.websocket.WebSocketContainer;
 import java.util.UUID;
 import java.util.concurrent.BlockingQueue;
 import java.util.concurrent.LinkedBlockingQueue;
@@ -37,7 +40,9 @@ public final class TestSocket implements AutoCloseable {
 				received.add(JSON.readTree(message.getPayload()));
 			}
 		};
-		this.session = new StandardWebSocketClient()
+		WebSocketContainer container = ContainerProvider.getWebSocketContainer();
+		container.setDefaultMaxTextMessageBufferSize(1024 * 1024);
+		this.session = new StandardWebSocketClient(container)
 				.execute(handler, headers, uri)
 				.get(5, TimeUnit.SECONDS);
 	}

@@ -15,6 +15,7 @@ import com.hmzckd.pulse.web.NotFoundException;
 public class MessageService {
 
 	public static final int MAX_TEXT_LENGTH = 2000;
+	public static final int SYNC_LIMIT = 500;
 	static final int DEFAULT_PAGE_SIZE = 50;
 	static final int MAX_PAGE_SIZE = 100;
 
@@ -52,6 +53,15 @@ public class MessageService {
 		Collections.reverse(page);
 		Long nextBefore = page.size() == size && page.getFirst().seq() > 1 ? page.getFirst().seq() : null;
 		return new HistoryPage(page, nextBefore);
+	}
+
+	public SyncPage since(UUID roomId, long afterSeq) {
+		List<StoredMessage> found = messages.findAfter(roomId, afterSeq, SYNC_LIMIT + 1);
+		boolean truncated = found.size() > SYNC_LIMIT;
+		return new SyncPage(truncated ? found.subList(0, SYNC_LIMIT) : found, truncated);
+	}
+
+	public record SyncPage(List<StoredMessage> messages, boolean truncated) {
 	}
 
 	public record SaveResult(StoredMessage message, boolean duplicate) {

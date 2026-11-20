@@ -84,6 +84,19 @@ class MessageRepository {
 				.list();
 	}
 
+	List<StoredMessage> findAfter(UUID roomId, long afterSeq, int limit) {
+		return jdbc.sql(SELECT_MESSAGE + """
+				 WHERE m.room_id = :roomId AND m.seq > :after
+				ORDER BY m.seq
+				LIMIT :limit
+				""")
+				.param("roomId", roomId)
+				.param("after", afterSeq)
+				.param("limit", limit)
+				.query(MessageRepository::map)
+				.list();
+	}
+
 	private static StoredMessage map(ResultSet rs, int rowNum) throws SQLException {
 		return new StoredMessage(
 				rs.getObject("id", UUID.class),
