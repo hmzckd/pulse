@@ -22,20 +22,13 @@ Pass criteria (k6 thresholds): `delivery_ms` p95 under 200 ms, more than 99% of 
 
 ## Run it
 
-1. Start PostgreSQL and Redis, then two servers in two windows:
+1. Start PostgreSQL, Redis and the two instances:
 
    ```powershell
-   docker compose up -d
-   $env:PULSE_JWT_SECRET = "dev-secret-dev-secret-dev-secret-123"
-   $env:PORT = "8081"; $env:PULSE_INSTANCE_ID = "a"; .\mvnw.cmd spring-boot:run
+   docker compose up -d --build
    ```
 
-   ```powershell
-   $env:PULSE_JWT_SECRET = "dev-secret-dev-secret-dev-secret-123"
-   $env:PORT = "8082"; $env:PULSE_INSTANCE_ID = "b"; .\mvnw.cmd spring-boot:run
-   ```
-
-2. In a third window, from the repository folder, run k6 in Docker:
+2. From the repository folder, run k6 in Docker:
 
    ```powershell
    Get-Content load-test\chat.js | docker run --rm -i grafana/k6:1.3.0 run -
